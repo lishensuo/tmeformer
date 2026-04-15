@@ -1,6 +1,6 @@
 # TMEformer
 
-TMEformer is a model that extends [Geneformer](https://github.com/amva13/geneformer) by incorporating the tumor microenvironment (TME) context. While Geneformer focuses on modeling individual cells in isolation, TMEformer considers the influence of neighboring cells on tumor cell states, enabling a more comprehensive understanding of tumor biology.
+TMEformer is a model that extends [Geneformer](https://geneformer.readthedocs.io/en/latest/) by incorporating the tumor microenvironment (TME) context. While Geneformer focuses on modeling individual cells in isolation, TMEformer considers the influence of neighboring cells on tumor cell states, enabling a more comprehensive understanding of tumor biology.
 
 ## Overview
 
@@ -11,7 +11,7 @@ TMEformer introduces multiple **in silico perturbation (ISP)** scenarios to help
 The core TME modeling utilities are located in `src/TMEformer/tme/`:
 
 ### BERT-based Architecture (`TmeModeling_bert.py`)
-- **CellBertEmbeddings**: Converts TME cell information into 3D embedding representations by combining base cell embeddings, cell type embeddings, and position embeddings
+- **CellBertEmbeddings**: Converts TME cell information into embedding representations by combining base cell embeddings and cell type embeddings
 - **CellBertModel**: BERT encoder for TME embeddings with attention or mean pooling
 - **TmeBertEmbeddings**: GeneFormer-style input embeddings with TME context fusion
 - **TmeBertEncoder/Model**: BERT encoder with optional cross-attention for TME integration, supporting two modes:
@@ -19,10 +19,7 @@ The core TME modeling utilities are located in `src/TMEformer/tme/`:
   - `"cross"`: TME context is integrated via cross-attention in specific transformer layers
 - **Downstream Task Heads**:
   - `TmeBertForMaskedLM`: Masked language modeling for pretraining
-  - `TmeBertForSequenceClassification`: Sequence classification
-  - `TmeBertForMultiGeneExpressionPrediction`: Multi-task regression for gene expression
-  - `TmeBertForCellClassification`: Cell type classification
-
+  - `TmeBertForMultiGeneExpressionPrediction`: Multi-task regression for gene 
 ### In Silico Perturbation Utilities
 
 | File | Description |
@@ -31,7 +28,7 @@ The core TME modeling utilities are located in `src/TMEformer/tme/`:
 | `TmeModeling_utils_isp_cell.py` | Cell-level perturbation utilities (perturb single cell's gene expression) |
 | `TmeModeling_utils_isp_ds.py` | Dataset utilities for ISP (generate ISP score sets, calculate scores) |
 | `TmeModeling_utils_isp_gep.py` | Gene expression perturbation analysis (CV evaluation, background gene preparation, ISP score calculation) |
-| `TmeModeling_utils_isp_lst.py` | List-based perturbation utilities |
+| `TmeModeling_utils_isp_lst.py` | Sequence-based perturbation utilities |
 | `TmeModeling_utils_isp_pipe.py` | ISP pipeline orchestration (`TME_ISPipe` class) |
 | `TmeModeling_utils_isp_sim.py` | Cell embedding similarity perturbation analysis |
 | `TmeModeling_utils_prep.py` | Data preparation utilities |
@@ -57,6 +54,13 @@ pip install .
 ## Usage
 
 See the [documentation](https://tmeformer.readthedocs.io/) for detailed usage instructions, or refer to the CLI scripts in `src/TMEformer/cli/` for examples.
+
+### Tutorials
+
+The documentation includes interactive Jupyter notebook tutorials demonstrating ISP capabilities:
+
+- **Embedding-based ISP** (`docs/tutorials/isp_emb_sim/`): Analyze how gene perturbations affect cell embedding similarity and cell state transitions
+- **Gene Expression ISP** (`docs/tutorials/isp_gene_exp/`): Predict how gene perturbations affect marker gene expression in epithelial cells
 
 ## Citation
 

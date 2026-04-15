@@ -55,6 +55,7 @@ docs = [
     "sphinx-rtd-theme>=2.0",
     "sphinx-autodoc-typehints",
     "myst-parser",
+    "nbsphinx",
 ]
 
 [project.scripts]

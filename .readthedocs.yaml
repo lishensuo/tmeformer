@@ -13,7 +13,7 @@ build:
 
 # Build documentation in the docs/ directory with Sphinx
 sphinx:
-  configuration: TMEformer-repo/docs/conf.py
+  configuration: docs/conf.py
 
 # Build documentation with additional formats (optional)
 # formats:
@@ -24,6 +24,6 @@ sphinx:
 python:
   install:
     - method: pip
-      path: TMEformer-repo
+      path: .
       extra_requirements:
         - docs
