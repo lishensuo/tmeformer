@@ -414,6 +414,8 @@ def vis_delta_emb_sim_boxbar(
         ax = sns.boxplot(data=stats_filt, y="cell_score", **kwargs)
     elif geom_type == "bar":
         ax = sns.barplot(data=stats_filt, y="cell_score", **kwargs)
+    elif geom_type == "violin":
+        ax = sns.violinplot(data=stats_filt, y="cell_score", **kwargs)
 
     # Draw lines connecting paired samples
     if line:

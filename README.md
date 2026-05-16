@@ -2,6 +2,8 @@
 
 TMEformer is a model that extends [Geneformer](https://geneformer.readthedocs.io/en/latest/) by incorporating the tumor microenvironment (TME) context. While Geneformer focuses on modeling individual cells in isolation, TMEformer considers the influence of neighboring cells on tumor cell states, enabling a more comprehensive understanding of tumor biology.
 
+![TMEformer Model Architecture](docs/_static/fig_1.png)
+
 ## Overview
 
 TMEformer introduces multiple **in silico perturbation (ISP)** scenarios to help discover and characterize endogenous factors and microenvironmental signals that influence tumor development and progression. By modeling cell-cell interactions within the TME, the model can predict how perturbations in the microenvironment affect tumor cell states.
@@ -64,7 +66,7 @@ The documentation includes interactive Jupyter notebook tutorials demonstrating 
 
 ## Citation
 
-If you use TMEformer in your research, please cite our work.
+The manuscript for TMEformer is currently under submission. Citation information will be provided once the paper is published.
 
 ## License
 

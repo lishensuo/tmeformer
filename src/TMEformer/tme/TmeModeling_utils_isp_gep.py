@@ -35,6 +35,7 @@ import pandas as pd
 import seaborn as sns
 from datasets import Dataset, load_from_disk
 from tqdm import tqdm
+import warnings
 
 from . import TmeModeling_utils as tu
 from . import TmeModeling_utils_isp_cell as tu_isp_cell
@@ -568,7 +569,8 @@ def merge_isp_gep_stat_raw(
             if tme_isp:
                 celltype = int(perturb_obj.split("_")[0].replace("TME", ""))
                 isp_score_merge["cell_type"] = celltype
-                isp_score_merge["group"] = celltype if k == "Target" else "Background"
+                # isp_score_merge["group"] = celltype if k == "Target" else "Background"
+                isp_score_merge["group"] = perturb_obj.split("_")[1]
 
                 if tme_method == "composition":
                     fold_change = float(isp_config.split("_")[1].replace("EP", ""))
@@ -576,9 +578,12 @@ def merge_isp_gep_stat_raw(
                     isp_score_merge = isp_score_merge.rename(
                         columns={"cell_type": "isp_cell_type"}
                     )
+                    isp_score_merge["group"] = celltype if k == "Target" else "Background"
+
                 elif tme_method == "rank":
                     gene_symbol = perturb_obj.split("_")[1]
-                    isp_score_merge["isp_gene"] = gene_symbol
+                    if gene_symbol != "Background":
+                        isp_score_merge["isp_gene"] = gene_symbol
             else:
                 isp_gene_type = perturb_obj
                 isp_score_merge["group"] = isp_gene_type
@@ -636,6 +641,7 @@ def merge_isp_gep_stat_raw(
     return isp_score_merge_compare
 
 
+
 def filter_isp_gep_stat_raw(
     stats_raw: pd.DataFrame,
     score_type: Optional[str] = "OE",
@@ -644,10 +650,11 @@ def filter_isp_gep_stat_raw(
     stat_level: str = "patch",
     stat_method: str = "mean",
     pair: bool = True,
+    z_score_col: Optional[str] = None,
 ) -> pd.DataFrame:
     """
     Filter and aggregate ISP GEP results.
-
+ 
     Args:
         stats_raw: Raw statistics DataFrame.
         score_type: Type of score. Options: 'OE', 'KD', or None.
@@ -656,75 +663,124 @@ def filter_isp_gep_stat_raw(
         stat_level: Level of statistics. Options: 'patch' or 'sample'.
         stat_method: Statistical method to apply (default: 'mean').
         pair: Whether to keep paired ISP between groups (default: True).
-
+        z_score_col: Column in stats_raw to use as grouping variable for Z-score
+            normalization. If None, returns raw cell_score without normalization.
+            After aggregation, cell_score is Z-score normalized within each
+            patch_id (patch level) or sample_name (sample level), across the
+            categories defined by z_score_col, then aggregated again by group.
+ 
     Returns:
         Filtered statistics DataFrame.
-
+ 
     Raises:
+        ValueError: If stat_level is not 'patch' or 'sample'.
         ValueError: If score_interval is specified but no rank_pc column exists.
+        ValueError: If z_score_col is specified but not found in stats_raw.
     """
     stats_filt = stats_raw.copy()
-
+ 
+    # --- Filtering ---
     if score_type is not None:
         stats_filt = stats_filt[stats_filt["score_type"] == score_type]
-
     if score_method is not None:
         stats_filt = stats_filt[stats_filt["score_method"] == score_method]
-
     if score_interval is not None:
         if "rank_pc" in stats_filt.columns:
             stats_filt = add_interval_annotation(stats_filt, score_type)
             stats_filt = stats_filt[stats_filt["interval"] == score_interval]
         else:
             raise ValueError("[Error] No rank_pc column in stats_raw")
-
-    if stat_level == "patch":
-        default_group_cols = [
-            "model_id",
-            "model_gene",
-            "patch_id",
-            "score_type",
-            "score_method",
+ 
+    # --- Validate z_score_col ---
+    if z_score_col is not None and z_score_col not in stats_raw.columns:
+        raise ValueError(f"[Error] z_score_col '{z_score_col}' not found in stats_raw")
+ 
+    def _zscore(x: pd.Series) -> pd.Series:
+        """Z-score normalize a series; returns NaN if fewer than 2 observations."""
+        if x.shape[0] < 2:
+            warnings.warn(
+                f"Z-score group has only {x.shape[0]} observation(s); returning NaN.",
+                RuntimeWarning,
+                stacklevel=2,
+            )
+            return pd.Series(np.nan, index=x.index)
+        std = x.std(ddof=1)
+        if std == 0 or pd.isna(std):
+            return pd.Series(np.nan, index=x.index)
+        return (x - x.mean()) / std
+ 
+    def _apply_pair_filter(df: pd.DataFrame, group_cols: list) -> pd.DataFrame:
+        """
+        Keep only rows whose group_cols key is present in ALL unique group values.
+        More robust than duplicated(keep=False), which is fooled by within-group
+        duplicates.
+        """
+        groups = df["group"].unique()
+        if len(groups) <= 1:
+            return df
+        key_sets = [
+            set(map(tuple, df.loc[df["group"] == g, group_cols].values))
+            for g in groups
         ]
-        group_cols = (
-            default_group_cols + ["interval"]
-            if "interval" in stats_raw.columns
-            else default_group_cols
-        )
+        valid_keys = key_sets[0].intersection(*key_sets[1:])
+        mask = df[group_cols].apply(tuple, axis=1).isin(valid_keys)
+        return df[mask]
+ 
+    # --- Resolve group_cols (only difference between patch / sample) ---
+    _level_col = {"patch": "patch_id", "sample": "sample_name"}
+    if stat_level not in _level_col:
+        raise ValueError(f"[Error] stat_level must be 'patch' or 'sample', got '{stat_level}'")
+ 
+    default_group_cols = [
+        "model_id",
+        "model_gene",
+        _level_col[stat_level],
+        "score_type",
+        "score_method",
+    ]
+    group_cols = (
+        default_group_cols + ["interval"]
+        if "interval" in stats_filt.columns
+        else default_group_cols
+    )
+    extra_cols = [z_score_col] if z_score_col is not None else []
+ 
+    # --- Pair filtering: before aggregation so excluded units don't skew stats ---
+    # NaN cell_scores are dropped first so they don't register as valid observations
+    # when checking key presence across groups.
 
+    # --- First aggregation (includes z_score_col if specified) ---
+    stats_filt = (
+        stats_filt.groupby(group_cols + ["group"] + extra_cols, observed=True)["cell_score"]
+        .agg([stat_method])
+        .reset_index()
+        .rename(columns={stat_method: "cell_score"})
+    )
+ 
+    if stats_filt["group"].unique().shape[0] > 1:
+        # stats_filt = stats_filt.dropna(subset=["cell_score"])
+        stats_filt = stats_filt.dropna()
+        if pair:
+            # stats_filt = _apply_pair_filter(stats_filt, group_cols)
+            stats_filt = stats_filt[stats_filt[group_cols].duplicated(keep=False)]
+            print(stats_filt.shape)
+ 
+
+    # --- Z-score + second aggregation (collapses z_score_col dimension) ---
+    if z_score_col is not None:
+        stats_filt["cell_score"] = (
+            stats_filt.groupby(group_cols, observed=True)["cell_score"]
+            .transform(_zscore)
+        )
         stats_filt = (
             stats_filt.groupby(group_cols + ["group"], observed=True)["cell_score"]
             .agg([stat_method])
             .reset_index()
+            .rename(columns={stat_method: "cell_score"})
         )
-
-        if stats_filt["group"].unique().shape[0] > 1:
-            stats_filt = stats_filt.dropna()
-            # Keep paired isp between two groups
-            if pair:
-                stats_filt = stats_filt[stats_filt[group_cols].duplicated(keep=False)]
-
-    elif stat_level == "sample":
-        default_group_cols = [
-            "model_id",
-            "model_gene",
-            "sample_name",
-            "score_type",
-            "score_method",
-        ]
-        group_cols = (
-            default_group_cols + ["interval"]
-            if "interval" in stats_raw.columns
-            else default_group_cols
-        )
-
-        stats_filt = (
-            stats_filt.groupby(group_cols + ["group"], observed=True)["cell_score"]
-            .agg([stat_method])
-            .reset_index()
-        )
-
-    stats_filt = stats_filt.rename(columns={stat_method: "cell_score"})
+        if pair:
+            stats_filt = stats_filt[stats_filt[group_cols].duplicated(keep=False)]
+            print(stats_filt.shape)
 
     return stats_filt
 

@@ -40,3 +40,6 @@ Thumbs.db
 *.h5
 *.csv
 *.parquet
+
+
+test.py
